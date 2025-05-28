@@ -320,8 +320,10 @@ class DiscoveryScanner:
                         "banner": service_info.get("banner")
                     }
                     
-                    # Check for vulnerabilities
-                    vulns = self._check_vulnerabilities(service_info.get("service"), service_info.get("banner"))
+                    # Check for vulnerabilities - fix the type issue here
+                    service_name = service_info.get("service") or "unknown"
+                    banner_text = service_info.get("banner") or ""
+                    vulns = self._check_vulnerabilities(service_name, banner_text)
                     if vulns:
                         port_info["vulnerabilities"] = vulns
                         self.results["vulnerabilities"].extend(vulns)
