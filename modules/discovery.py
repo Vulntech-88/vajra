@@ -121,7 +121,7 @@ class DiscoveryScanner:
     def run(self):
         """Execute discovery scan"""
         start_time = datetime.now()
-        print(f"[Discovery] Starting comprehensive scan for {self.target}")
+        self.logger.info(f"[Discovery] Starting comprehensive scan for {self.target}")
         
         try:
             # Target resolution and info
@@ -154,10 +154,10 @@ class DiscoveryScanner:
             # Save results
             self._save_results()
             
-            print(f"[Discovery] Scan completed in {duration:.2f} seconds")
-            print(f"[Discovery] Found {len(self.results['live_hosts'])} live hosts")
-            print(f"[Discovery] Found {len(self.results['open_ports'])} open ports")
-            print(f"[Discovery] Identified {len(self.results['vulnerabilities'])} potential vulnerabilities")
+            self.logger.info(f"[Discovery] Scan completed in {duration:.2f} seconds")
+            self.logger.info(f"[Discovery] Found {len(self.results['live_hosts'])} live hosts")
+            self.logger.info(f"[Discovery] Found {len(self.results['open_ports'])} open ports")
+            self.logger.info(f"[Discovery] Identified {len(self.results['vulnerabilities'])} potential vulnerabilities")
             
         except Exception as e:
             self.logger.error(f"Discovery scan failed: {e}")
@@ -196,7 +196,7 @@ class DiscoveryScanner:
     
     def _ping_sweep(self):
         """Ping sweep to find live hosts"""
-        print(f"[Discovery] Starting ping sweep on {self.target}")
+        self.logger.info(f"[Discovery] Starting ping sweep on {self.target}")
         
         target_ip = self.results["target_info"].get("ip")
         if not target_ip:
@@ -260,10 +260,10 @@ class DiscoveryScanner:
     def _arp_scan(self):
         """ARP scan for local network discovery"""
         if not SCAPY_AVAILABLE:
-            print("[Discovery] ARP scan skipped - Scapy not available")
+            self.logger.info("[Discovery] ARP scan skipped - Scapy not available")
             return
             
-        print(f"[Discovery] Starting ARP scan on {self.target}")
+        self.logger.info(f"[Discovery] Starting ARP scan on {self.target}")
         
         target_ip = self.results["target_info"].get("ip")
         if not target_ip:
@@ -295,7 +295,7 @@ class DiscoveryScanner:
     
     def _tcp_port_scan(self):
         """TCP port scanning"""
-        print(f"[Discovery] Starting TCP port scan")
+        self.logger.info(f"[Discovery] Starting TCP port scan")
         
         target_ip = self.results["target_info"].get("ip")
         if not target_ip:
@@ -343,7 +343,7 @@ class DiscoveryScanner:
     
     def _udp_port_scan(self):
         """UDP port scanning"""
-        print(f"[Discovery] Starting UDP port scan")
+        self.logger.info(f"[Discovery] Starting UDP port scan")
         
         target_ip = self.results["target_info"].get("ip")
         if not target_ip:
@@ -492,13 +492,13 @@ class DiscoveryScanner:
     def _dns_enumeration(self):
         """DNS enumeration"""
         if not DNS_AVAILABLE:
-            print("[Discovery] DNS enumeration skipped - dnspython not available")
+            self.logger.debug("[Discovery] DNS enumeration skipped - dnspython not available")
             return
             
         if self.results["target_info"].get("type") != "hostname":
             return
             
-        print("[Discovery] Starting DNS enumeration")
+        self.logger.info("[Discovery] Starting DNS enumeration")
         
         domain = self.target
         dns_info = {
@@ -581,10 +581,10 @@ class DiscoveryScanner:
     def _whois_lookup(self):
         """WHOIS information gathering"""
         if not WHOIS_AVAILABLE:
-            print("[Discovery] WHOIS lookup skipped - python-whois not available")
+            self.logger.debug("[Discovery] WHOIS lookup skipped - python-whois not available")
             return
             
-        print("[Discovery] Starting WHOIS lookup")
+        self.logger.info("[Discovery] Starting WHOIS lookup")
         
         try:
             if self._is_ip_address(self.target):
@@ -615,7 +615,7 @@ class DiscoveryScanner:
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, indent=2, ensure_ascii=False, default=str)
-            print(f"[Discovery] Results saved to {filename}")
+            self.logger.info(f"[Discovery] Results saved to {filename}")
         except Exception as e:
             self.logger.error(f"Failed to save results: {e}")
 
