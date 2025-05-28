@@ -1,57 +1,75 @@
 # Vajra Security Scanner
 
-A modular Python-based security scanner that follows a comprehensive workflow for network security assessment.
+**Vajra** is an open-source, modular Python-based security scanner designed to perform a full-stack assessment of networks and web applications. It integrates various scanning phases such as host discovery, service enumeration, vulnerability assessment, compliance checking, and malware fingerprinting—making it a versatile tool for red teams, blue teams, and developers alike.
 
-## Installation
+---
 
-1. Run the setup script:
-```bash
-chmod +x setup_vajra.sh
-./setup_vajra.sh
-```
+## 🔍 Features
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+- **Discovery**: Detects live hosts and open ports using ping sweeps, ARP, TCP/UDP scans.
+- **Enumeration**: Identifies running services, grabs banners, and detects versions.
+- **Vulnerability Detection**: Matches results with public CVEs and advisories.
+- **Deep Scanning**: Credentialed scanning for misconfigurations and missing patches.
+- **Web App Testing**: Covers OWASP Top 10, CMS issues, and security misconfigs.
+- **Compliance Checking**: Supports checks for CIS, PCI-DSS, HIPAA, ISO 27001.
+- **Malware Fingerprinting**: Flags malware indicators and suspicious files.
+- **Reporting**: Outputs detailed reports in JSON, HTML, and CSV formats.
 
-## Usage
+---
 
-### Full Scan
+## 🚀 Getting Started
+
+### 📦 Requirements
+
+- Python 3.8+
+- Run `pip install -r requirements.txt` to install dependencies.
+
+### 🔧 Usage
+
+#### Full Scan
+
 ```bash
 python main.py 192.168.1.1
 ```
 
-### Individual Module (Future Feature)
+#### Run Specific Module *(coming soon)*
+
 ```bash
 python main.py 192.168.1.1 --module discovery
 ```
 
-## Workflow Phases
+---
 
-1. **Discovery**: Host and port discovery
-2. **Enumeration**: Service detection and banner grabbing
-3. **Vulnerability Detection**: CVE matching and exploit search
-4. **Deep Scanning**: Credentialed scanning and configuration audit
-5. **Web Testing**: OWASP Top 10 and web application security
-6. **Compliance**: CIS, PCI-DSS, HIPAA, ISO 27001 checks
-7. **Malware Detection**: Signature scanning and IOC detection
-8. **Reporting**: Consolidated JSON, HTML, and CSV reports
+## 🧠 Workflow Overview
 
-## Output
+```
+Discovery → Enumeration → Vulnerability Detection → Deep Scanning (Credentialed)
+→ Web App Testing → Compliance Checking → Malware Fingerprinting → Reporting
+```
 
-- Individual module results: `output/[module]_[target]_[timestamp].json`
-- Full scan results: `output/vajra_full_scan_[target]_[timestamp].json`
-- Logs: `logs/` directory
+Each module uses output from the previous stage for deeper analysis.
 
-## Project Structure
+---
+
+## 📁 Output Files
+
+- **Per Module Output**: `output/[module]_[target]_[timestamp].json`
+- **Full Scan Report**: `output/vajra_full_scan_[target]_[timestamp].json`
+- **Logs**: Stored in the `logs/` directory for debugging and audit trails.
+
+---
+
+## 🗂️ Project Structure
 
 ```
 vajra/
-├── modules/          # Scanner modules
-├── utils/           # Helper functions
-├── logs/            # Log files
-├── output/          # Scan results
-├── main.py          # Main controller
-└── requirements.txt # Dependencies
+├── modules/           # All core scanning modules
+├── utils/             # Utility functions and shared helpers
+├── logs/              # Log output of each module
+├── output/            # Scan results and final reports
+├── main.py            # Main controller to orchestrate modules
+├── requirements.txt   # Python dependencies
+└── README.md          # Project documentation
 ```
+
+---
