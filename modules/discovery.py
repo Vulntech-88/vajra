@@ -1,6 +1,7 @@
 """
-Discovery Scanner Module
+Discovery Scanner Module - FIXED VERSION
 Identifies live hosts using ping sweeps, ARP requests, TCP/UDP port scans
+Fixed the contradiction between live hosts and open ports detection
 """
 import json
 import logging
@@ -65,7 +66,7 @@ class DiscoveryScanner:
             "scan_info": {
                 "target": target,
                 "timestamp": datetime.now().isoformat(),
-                "scanner": "DiscoveryScanner"
+                "scanner": "Discovery"
             },
             "target_info": {},
             "live_hosts": [],
@@ -119,7 +120,7 @@ class DiscoveryScanner:
         self.logger = logging.getLogger(__name__)
         
     def run(self):
-        """Execute discovery scan"""
+        """Execute discovery scan with proper host-port association"""
         start_time = datetime.now()
         self.logger.info(f"[Discovery] Starting comprehensive scan for {self.target}")
         
@@ -127,11 +128,8 @@ class DiscoveryScanner:
             # Target resolution and info
             self._resolve_target()
             
-            # Discovery scans
-            self._ping_sweep()
-            self._arp_scan()
-            self._tcp_port_scan()
-            self._udp_port_scan()
+            # Enhanced discovery scans with proper host detection
+            self._enhanced_host_discovery()
             
             # Additional enumeration
             self._dns_enumeration()
@@ -194,51 +192,138 @@ class DiscoveryScanner:
         except:
             return False
     
-    def _ping_sweep(self):
-        """Ping sweep to find live hosts"""
-        self.logger.info(f"[Discovery] Starting ping sweep on {self.target}")
-        
+    def _enhanced_host_discovery(self):
+        """Enhanced host discovery that properly associates hosts with their open ports"""
         target_ip = self.results["target_info"].get("ip")
         if not target_ip:
             return
             
-        try:
-            # If it's a single IP, just ping it
-            if self._is_ip_address(self.target) and '/' not in self.target:
-                if self._ping_host(target_ip):
-                    self.results["live_hosts"].append({
-                        "ip": target_ip,
-                        "method": "ping",
-                        "response_time": "unknown"
-                    })
-                return
+        self.logger.info(f"[Discovery] Starting enhanced host discovery for {target_ip}")
+        
+        # Determine if this is a single host or subnet scan
+        if self._is_single_host():
+            self._discover_single_host(target_ip)
+        else:
+            self._discover_subnet_hosts(target_ip)
+    
+    def _is_single_host(self) -> bool:
+        """Check if target is a single host (not a subnet)"""
+        return ('/' not in self.target and 
+                self._is_ip_address(self.target)) or not self._is_ip_address(self.target)
+    
+    def _discover_single_host(self, target_ip: str):
+        """Discover single host using multiple methods"""
+        host_info = {
+            "ip": target_ip,
+            "hostname": self.results["target_info"].get("hostname"),
+            "detection_methods": [],
+            "open_ports": [],
+            "services": []
+        }
+        
+        # Method 1: ICMP Ping
+        if self._ping_host(target_ip):
+            host_info["detection_methods"].append("icmp_ping")
+            self.logger.info(f"[Discovery] Host {target_ip} responds to ICMP ping")
+        
+        # Method 2: ARP (for local networks)
+        if SCAPY_AVAILABLE:
+            mac_address = self._arp_ping(target_ip)
+            if mac_address:
+                host_info["detection_methods"].append("arp")
+                host_info["mac_address"] = mac_address
+                self.logger.info(f"[Discovery] Host {target_ip} detected via ARP: {mac_address}")
+        
+        # Method 3: TCP Connect Scan (most reliable for internet hosts)
+        open_ports = self._tcp_connect_scan(target_ip)
+        if open_ports:
+            host_info["detection_methods"].append("tcp_connect")
+            host_info["open_ports"] = open_ports
+            self.logger.info(f"[Discovery] Host {target_ip} has {len(open_ports)} open TCP ports")
             
-            # For subnet discovery
-            try:
-                network = ipaddress.IPv4Network(f"{target_ip}/24", strict=False)
-                if network.num_addresses > 256:
-                    # Limit large subnets
-                    hosts_to_scan = random.sample(list(network.hosts()), 100)
-                else:
-                    hosts_to_scan = list(network.hosts())
+            # Add individual port entries to results
+            for port_info in open_ports:
+                self.results["open_ports"].append(port_info)
+                self.results["services"].append(port_info)
+        
+        # Method 4: UDP Scan (limited)
+        udp_ports = self._udp_scan(target_ip)
+        if udp_ports:
+            if "udp_scan" not in host_info["detection_methods"]:
+                host_info["detection_methods"].append("udp_scan")
+            host_info["open_ports"].extend(udp_ports)
+            
+            # Add UDP ports to results
+            for port_info in udp_ports:
+                self.results["open_ports"].append(port_info)
+                self.results["services"].append(port_info)
+        
+        # If we detected the host by any method, add it to live_hosts
+        if host_info["detection_methods"]:
+            self.results["live_hosts"].append(host_info)
+            self.logger.info(f"[Discovery] Host {target_ip} confirmed live via: {', '.join(host_info['detection_methods'])}")
+        else:
+            # Host doesn't respond to any detection method
+            self.logger.warning(f"[Discovery] Host {target_ip} does not respond to any detection methods")
+            # Still add it as a potential host if we resolved it
+            if self.results["target_info"].get("hostname"):
+                host_info["detection_methods"] = ["dns_resolution"]
+                host_info["status"] = "unresponsive"
+                self.results["live_hosts"].append(host_info)
+    
+    def _discover_subnet_hosts(self, target_ip: str):
+        """Discover hosts in a subnet"""
+        try:
+            network = ipaddress.IPv4Network(f"{target_ip}/24", strict=False)
+            if network.num_addresses > 256:
+                # Limit large subnets
+                hosts_to_scan = random.sample(list(network.hosts()), 100)
+            else:
+                hosts_to_scan = list(network.hosts())
+            
+            self.logger.info(f"[Discovery] Scanning {len(hosts_to_scan)} hosts in subnet")
+            
+            def discover_host(ip_addr):
+                ip_str = str(ip_addr)
+                host_info = {
+                    "ip": ip_str,
+                    "detection_methods": [],
+                    "open_ports": []
+                }
                 
-                def ping_worker(ip):
-                    if self._ping_host(str(ip)):
-                        return {"ip": str(ip), "method": "ping", "response_time": "unknown"}
-                    return None
+                # ICMP Ping
+                if self._ping_host(ip_str):
+                    host_info["detection_methods"].append("icmp_ping")
                 
-                with ThreadPoolExecutor(max_workers=50) as executor:
-                    results = list(executor.map(ping_worker, hosts_to_scan))
-                    
-                for result in results:
-                    if result:
-                        self.results["live_hosts"].append(result)
+                # ARP for local network
+                if SCAPY_AVAILABLE:
+                    mac_address = self._arp_ping(ip_str)
+                    if mac_address:
+                        host_info["detection_methods"].append("arp")
+                        host_info["mac_address"] = mac_address
+                
+                # Quick TCP scan on common ports
+                quick_ports = [22, 23, 25, 53, 80, 135, 139, 443, 445, 993, 995, 3389]
+                open_ports = self._quick_tcp_scan(ip_str, quick_ports)
+                if open_ports:
+                    host_info["detection_methods"].append("tcp_connect")
+                    host_info["open_ports"] = open_ports
+                
+                return host_info if host_info["detection_methods"] else None
+            
+            with ThreadPoolExecutor(max_workers=50) as executor:
+                results = list(executor.map(discover_host, hosts_to_scan))
+            
+            for result in results:
+                if result:
+                    self.results["live_hosts"].append(result)
+                    # Add ports to main results
+                    for port_info in result.get("open_ports", []):
+                        self.results["open_ports"].append(port_info)
+                        self.results["services"].append(port_info)
                         
-            except Exception as e:
-                self.logger.debug(f"Subnet ping sweep failed: {e}")
-                
         except Exception as e:
-            self.logger.error(f"Ping sweep failed: {e}")
+            self.logger.error(f"Subnet discovery failed: {e}")
     
     def _ping_host(self, ip: str) -> bool:
         """Ping a single host"""
@@ -257,61 +342,39 @@ class DiscoveryScanner:
         except:
             return False
     
-    def _arp_scan(self):
-        """ARP scan for local network discovery"""
+    def _arp_ping(self, ip: str) -> Optional[str]:
+        """ARP ping for a single host"""
         if not SCAPY_AVAILABLE:
-            self.logger.info("[Discovery] ARP scan skipped - Scapy not available")
-            return
-            
-        self.logger.info(f"[Discovery] Starting ARP scan on {self.target}")
-        
-        target_ip = self.results["target_info"].get("ip")
-        if not target_ip:
-            return
+            return None
             
         try:
-            # Only perform ARP scan on local subnets
-            network = ipaddress.IPv4Network(f"{target_ip}/24", strict=False)
-            if network.num_addresses > 256:
-                return  # Skip large networks for ARP
-            
-            arp_request = ARP(pdst=str(network))
+            arp_request = ARP(pdst=ip)
             broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
             arp_request_broadcast = broadcast / arp_request
             answered_list = srp(arp_request_broadcast, timeout=2, verbose=False)[0]
             
-            for element in answered_list:
-                host_info = {
-                    "ip": element[1].psrc,
-                    "mac": element[1].hwsrc,
-                    "method": "arp"
-                }
-                # Add to live hosts if not already present
-                if not any(h["ip"] == host_info["ip"] for h in self.results["live_hosts"]):
-                    self.results["live_hosts"].append(host_info)
-                    
+            if answered_list:
+                return answered_list[0][1].hwsrc
         except Exception as e:
-            self.logger.debug(f"ARP scan failed: {e}")
+            self.logger.debug(f"ARP ping failed for {ip}: {e}")
+        return None
     
-    def _tcp_port_scan(self):
-        """TCP port scanning"""
-        self.logger.info(f"[Discovery] Starting TCP port scan")
+    def _tcp_connect_scan(self, host: str) -> List[Dict[str, Any]]:
+        """Comprehensive TCP connect scan"""
+        open_ports = []
         
-        target_ip = self.results["target_info"].get("ip")
-        if not target_ip:
-            return
-            
         def scan_tcp_port(port):
             try:
                 time.sleep(self.rate_limit)
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(self.timeout)
-                result = sock.connect_ex((target_ip, port))
+                result = sock.connect_ex((host, port))
                 sock.close()
                 
                 if result == 0:
-                    service_info = self._detect_service(target_ip, port, 'tcp')
+                    service_info = self._detect_service(host, port, 'tcp')
                     port_info = {
+                        "ip": host,
                         "port": port,
                         "protocol": "tcp",
                         "state": "open",
@@ -320,7 +383,7 @@ class DiscoveryScanner:
                         "banner": service_info.get("banner")
                     }
                     
-                    # Check for vulnerabilities - fix the type issue here
+                    # Check for vulnerabilities
                     service_name = service_info.get("service") or "unknown"
                     banner_text = service_info.get("banner") or ""
                     vulns = self._check_vulnerabilities(service_name, banner_text)
@@ -338,17 +401,39 @@ class DiscoveryScanner:
             
         for result in results:
             if result:
-                self.results["open_ports"].append(result)
-                self.results["services"].append(result)
+                open_ports.append(result)
+                
+        return open_ports
     
-    def _udp_port_scan(self):
-        """UDP port scanning"""
-        self.logger.info(f"[Discovery] Starting UDP port scan")
+    def _quick_tcp_scan(self, host: str, ports: List[int]) -> List[Dict[str, Any]]:
+        """Quick TCP scan for subnet discovery"""
+        open_ports = []
         
-        target_ip = self.results["target_info"].get("ip")
-        if not target_ip:
-            return
-            
+        for port in ports:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)  # Faster timeout for subnet scans
+                result = sock.connect_ex((host, port))
+                sock.close()
+                
+                if result == 0:
+                    port_info = {
+                        "ip": host,
+                        "port": port,
+                        "protocol": "tcp",
+                        "state": "open",
+                        "service": self.service_names.get(port, "unknown")
+                    }
+                    open_ports.append(port_info)
+            except:
+                continue
+                
+        return open_ports
+    
+    def _udp_scan(self, host: str) -> List[Dict[str, Any]]:
+        """UDP port scanning"""
+        open_ports = []
+        
         # Common UDP ports
         udp_ports = [53, 67, 68, 69, 123, 135, 137, 138, 139, 161, 162, 445, 500, 514, 520, 1434, 1900, 4500, 5353]
         
@@ -356,11 +441,12 @@ class DiscoveryScanner:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.settimeout(2)
-                sock.sendto(b"", (target_ip, port))
+                sock.sendto(b"", (host, port))
                 try:
                     data, addr = sock.recvfrom(1024)
                     sock.close()
                     return {
+                        "ip": host,
                         "port": port,
                         "protocol": "udp",
                         "state": "open",
@@ -371,6 +457,7 @@ class DiscoveryScanner:
                     sock.close()
                     # UDP timeout might mean open or filtered
                     return {
+                        "ip": host,
                         "port": port,
                         "protocol": "udp",
                         "state": "open|filtered",
@@ -385,8 +472,9 @@ class DiscoveryScanner:
             
         for result in results:
             if result:
-                self.results["open_ports"].append(result)
-                self.results["services"].append(result)
+                open_ports.append(result)
+                
+        return open_ports
     
     def _detect_service(self, host: str, port: int, protocol: str) -> Dict[str, Any]:
         """Detect service information"""
@@ -619,8 +707,6 @@ class DiscoveryScanner:
         except Exception as e:
             self.logger.error(f"Failed to save results: {e}")
 
-
-# Example usage
 if __name__ == "__main__":
     import sys
     
@@ -644,3 +730,22 @@ if __name__ == "__main__":
     print(f"Services: {len(results['services'])}")
     print(f"Vulnerabilities: {len(results['vulnerabilities'])}")
     print(f"Duration: {results['scan_statistics'].get('duration_seconds', 0)} seconds")
+    
+    # Print detailed live host information
+    if results['live_hosts']:
+        print("\nLIVE HOSTS DETAILS:")
+        print("-" * 30)
+        for host in results['live_hosts']:
+            print(f"Host: {host['ip']}")
+            if 'hostname' in host and host['hostname']:
+                print(f"  Hostname: {host['hostname']}")
+            print(f"  Detection Methods: {', '.join(host['detection_methods'])}")
+            if 'mac_address' in host:
+                print(f"  MAC Address: {host['mac_address']}")
+            if 'open_ports' in host and host['open_ports']:
+                print(f"  Open Ports: {len(host['open_ports'])}")
+                for port in host['open_ports'][:5]:  # Show first 5 ports
+                    print(f"    {port['port']}/{port['protocol']} ({port['service']})")
+                if len(host['open_ports']) > 5:
+                    print(f"    ... and {len(host['open_ports']) - 5} more")
+            print()
