@@ -330,9 +330,10 @@ class EnhancedEnumerationScanner:
         
         return headers
     
-    def _service_specific_enumeration(self, host: str, port: int, protocol: str, 
-                                    service: str, banner_info: Dict) -> Optional[Dict]:
+    def _service_specific_enumeration(self, host: str, port: int, protocol: str, service: str, banner_info: Optional[Dict]) -> Optional[Dict]:
         """Perform service-specific enumeration"""
+        if banner_info is None:
+            banner_info = {}
         service_info = {
             'service_type': service,
             'port': port,
@@ -506,8 +507,8 @@ class EnhancedEnumerationScanner:
                     
                     if cert:
                         ssl_info['certificate_info'] = {
-                            'subject': dict(x[0] for x in cert.get('subject', [])),
-                            'issuer': dict(x[0] for x in cert.get('issuer', [])),
+                            'subject': dict((k, v) for item in cert.get('subject', []) for k, v in item),
+                            'issuer': dict((k, v) for item in cert.get('issuer', []) for k, v in item),
                             'version': cert.get('version'),
                             'not_before': cert.get('notBefore'),
                             'not_after': cert.get('notAfter'),
@@ -528,8 +529,10 @@ class EnhancedEnumerationScanner:
         
         return ssl_info
     
-    def _enhanced_version_detection(self, banner_info: Dict, service: str) -> Optional[Dict]:
+    def _enhanced_version_detection(self, banner_info: Optional[Dict], service: str) -> Optional[Dict]:
         """Enhanced version detection using multiple methods"""
+        if banner_info is None:
+            banner_info = {}
         version_info = {
             'detected_versions': [],
             'confidence': 'low',
@@ -574,9 +577,10 @@ class EnhancedEnumerationScanner:
         
         return version_info if version_info['detected_versions'] else None
     
-    def _check_service_vulnerabilities(self, service: str, banner_info: Dict, 
-                                     version_info: Dict) -> List[Dict]:
+    def _check_service_vulnerabilities(self, service: str, banner_info: Optional[Dict],version_info: Optional[Dict]) -> List[Dict]:
         """Check for service-specific vulnerabilities"""
+        if banner_info is None:
+            banner_info = {}
         vulnerabilities = []
         
         if not banner_info or 'raw_banner' not in banner_info:
@@ -854,7 +858,7 @@ class EnhancedEnumerationScanner:
                 service_scores[os_type] = score
         
         if service_scores:
-            best_os = max(service_scores, key=service_scores.get)
+            best_os = max(service_scores.keys(), key=lambda k: service_scores[k])
             return {
                 'detected_systems': [best_os],
                 'confidence_scores': service_scores,
@@ -889,7 +893,7 @@ class EnhancedEnumerationScanner:
             return 'Unknown', 'Low'
         
         # Determine final OS and confidence
-        best_os = max(os_votes, key=os_votes.get)
+        best_os = max(os_votes.keys(), key=lambda k: os_votes[k])
         max_score = os_votes[best_os]
         total_possible = sum(confidence_weights.values())
         
