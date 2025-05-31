@@ -18,14 +18,13 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional, Tuple
 
+
 # Import discovery scanner
 try:
     from discovery import DiscoveryScanner
 except ImportError:
     print("[Error] discovery.py module not found. Please ensure it's in the same directory.")
     sys.exit(1)
-
-
 class EnhancedEnumerationScanner:
     def __init__(self, target: str, discovery_data: Optional[Dict] = None):
         self.target = target
@@ -1315,34 +1314,73 @@ class EnhancedEnumerationScanner:
         
         print("=" * 60)
     
-    def load_discovery_report(self, report_path: str) -> bool:
+    def load_discovery_report(self, report_path: str | None = None) -> bool:
         """Load existing discovery report"""
         try:
-            if os.path.exists(report_path):
-                with open(report_path, 'r') as f:
-                    self.discovery_data = json.load(f)
-                print(f"[Enumeration] Loaded discovery report from {report_path}")
-                return True
-            else:
-                print(f"[Enumeration] Discovery report not found at {report_path}")
+            if not report_path:
+                # Use your specific fixed file path here
+                report_path = 'output/discovery_ransomewatch_online_20250530_125252.json'
+
+            if not os.path.exists(report_path):
+                print(f"[Enumeration] No discovery report found at {report_path} for target {self.target}")
                 return False
+
+            with open(report_path, 'r') as file:
+                self.discovery_data = json.load(file)
+
+            print(f"[Enumeration] Discovery report loaded from {report_path}")
+            return True
+
+        except FileNotFoundError:
+            print(f"[Enumeration] Report file not found: {report_path}")
+            return False
+        except json.JSONDecodeError:
+            print(f"[Enumeration] Invalid JSON in report file: {report_path}")
+            return False
         except Exception as e:
             print(f"[Enumeration] Error loading discovery report: {e}")
-            return False
-    
+            return False    
     def run_discovery_if_needed(self) -> bool:
-        """Run discovery scan if no discovery data is available"""
-        if self.discovery_data:
-            print("[Enumeration] Using existing discovery data")
-            return True
-        
+        def find_latest_report(target):
+            directory = "output"
+            # Normalize target string to filename pattern (dots -> underscores)
+            norm_target = target.replace('.', '_')  # Use parameter, not self.target inside here
+
+            def extract_datetime(filename):
+                match = re.search(r"(\d{8}_\d{6})", filename)
+                if match:
+                    return datetime.strptime(match.group(1), "%Y%m%d_%H%M%S")
+                return datetime.min
+
+            files = [
+                f for f in os.listdir(directory)
+                if f.startswith("discovery_") and norm_target in f and re.search(r"\d{8}_\d{6}", f)
+            ]
+
+            if files:
+                latest_file = max(files, key=extract_datetime)
+                return os.path.join(directory, latest_file)
+            else:
+                return None
+
+        report_path = find_latest_report(self.target)
+
+        if report_path is not None:
+            with open(report_path, 'r') as file:
+                self.discovery_data = json.load(file)
+            if self.discovery_data:
+                print("[Enumeration] Using existing discovery data")
+                return True
+        else:
+            print("[Enumeration] No existing discovery report found")
+
         print("[Enumeration] No discovery data found, running discovery scan...")
-        
+
         try:
             # Initialize and run discovery scanner
             discovery_scanner = DiscoveryScanner(self.target)
             discovery_results = discovery_scanner.run()
-            
+
             if discovery_results:
                 self.discovery_data = discovery_results
                 print("[Enumeration] Discovery scan completed successfully")
@@ -1350,7 +1388,7 @@ class EnhancedEnumerationScanner:
             else:
                 print("[Enumeration] Discovery scan failed")
                 return False
-                
+
         except Exception as e:
             print(f"[Enumeration] Error running discovery: {e}")
             return False
