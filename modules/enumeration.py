@@ -21,11 +21,11 @@ from typing import Dict, List, Any, Optional, Tuple
 
 # Import discovery scanner
 try:
-    from discovery import DiscoveryScanner
+    from .discovery import DiscoveryScanner
 except ImportError:
     print("[Error] discovery.py module not found. Please ensure it's in the same directory.")
     sys.exit(1)
-class EnhancedEnumerationScanner:
+class EnumerationScanner:
     def __init__(self, target: str, discovery_data: Optional[Dict] = None):
         self.target = target
         self.discovery_data = discovery_data or {}
@@ -1410,7 +1410,7 @@ def main():
     args = parser.parse_args()
     
     # Initialize scanner
-    scanner = EnhancedEnumerationScanner(args.target)
+    scanner = EnumerationScanner(args.target)
     
     # Load discovery report if provided
     if args.discovery_report:
